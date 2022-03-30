@@ -1,0 +1,70 @@
+struct Vertex
+{
+	float3 position;
+	float3 normal;
+};
+
+// GLOBAL DEFORMER SETTINGS
+RWStructuredBuffer<Vertex> vertexBuffer;
+RWStructuredBuffer<Vertex> vertexSwapBuffer;
+RWStructuredBuffer<Vertex> tmpBuffer;
+
+StructuredBuffer<Vertex> skinnedVertex;
+StructuredBuffer<float> envelopeBuffer;
+StructuredBuffer<int> topoVertVerts;
+StructuredBuffer<int> topoOffsets;
+StructuredBuffer<int> topoStartIndexes;
+float envelope;
+
+// MESH SMOOTH
+float flip;
+
+
+
+#pragma kernel CopySkinBuffer
+[numthreads(64,1,1)]
+void CopySkinBuffer (uint id : SV_DispatchThreadID)
+{
+    vertexBuffer[id.x].position = skinnedVertex[id.x].position;
+    vertexBuffer[id.x].normal = skinnedVertex[id.x].normal;
+    vertexSwapBuffer[id.x].position = skinnedVertex[id.x].position;
+    vertexSwapBuffer[id.x].normal = skinnedVertex[id.x].normal;
+}
+
+
+#pragma kernel ComputeSmooth
+[numthreads(64,1,1)]
+void ComputeSmooth (uint id : SV_DispatchThreadID)
+{
+    Vertex v = vertexSwapBuffer[id.x];
+
+    int startIndex = topoOffsets[id.x];
+    int connectedVertCount = topoOffsets[id.x + 1] - topoOffsets[id.x];
+
+    float3 positionSum = float3(v.position);
+    for (int i = startIndex; i < startIndex + connectedVertCount; i++)
+    {
+        Vertex connectedV = vertexSwapBuffer[topoVertVerts[i]];
+        positionSum += connectedV.position;
+    }
+    positionSum.x = (positionSum.x /  (float)(connectedVertCount+1));
+    positionSum.y = (positionSum.y /  (float)(connectedVertCount+1));
+    positionSum.z = (positionSum.z /  (float)(connectedVertCount+1));
+
+    vertexBuffer[id.x].position = positionSum;
+}
+
+
+#pragma kernel SwapVertexBuffers
+[numthreads(64,1,1)]
+void SwapVertexBuffers (uint id : SV_DispatchThreadID)
+{
+    float3 tmpPosition = vertexBuffer[id.x].position;
+    float3 tmpNormal = vertexBuffer[id.x].normal;
+
+    vertexBuffer[id.x].position = vertexSwapBuffer[id.x].position;
+    vertexBuffer[id.x].normal = vertexSwapBuffer[id.x].normal;
+
+    vertexSwapBuffer[id.x].position = tmpPosition;
+    vertexSwapBuffer[id.x].normal = tmpNormal;
+}

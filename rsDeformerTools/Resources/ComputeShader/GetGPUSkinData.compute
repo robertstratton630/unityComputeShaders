@@ -1,0 +1,86 @@
+#pragma kernel CopyMeshSkinnedPositions
+#pragma kernel CopyMeshPositions
+
+uint g_VertCount;
+uint g_VertStride;
+
+float4 g_RootRot;
+float4 g_RootPos;
+
+struct SVertOut
+{
+	float3 pos;
+	float3 norm;
+};
+
+
+float3 Rotate(float3 v, float4 q)
+{
+	float3 qVec = q.xyz;
+	float3 t = 2.0f * cross(qVec, v);
+	return v + q.w * t + cross(qVec, t);
+}
+
+[numthreads(64, 1, 1)]
+void CopyMeshSkinnedPositions(uint3 threadID : SV_DispatchThreadID,
+	ByteAddressBuffer g_VertexData,
+	RWStructuredBuffer<SVertOut> g_MeshVertsOut)
+{
+	const uint t = threadID.x;
+
+	if (t >= g_VertCount)
+	{
+		return;
+	}
+
+	const uint stride = g_VertStride;
+
+	float3 vP = float3(0, 0, 0);
+	float3 vN = float3(0, 0, 0);
+
+	uint dataStep = t * stride;
+
+	uint floatStep = dataStep;
+	vP = asfloat(g_VertexData.Load3(floatStep));
+
+	floatStep = dataStep + 12;
+	vN = asfloat(g_VertexData.Load3(floatStep));
+
+
+	//vP = Rotate(vP, g_RootRot);
+	//vP += g_RootPos.xyz;
+
+	//vN = Rotate(vN, g_RootRot);
+
+	g_MeshVertsOut[t].pos.xyz = vP;
+	g_MeshVertsOut[t].norm.xyz = vN;
+}
+
+[numthreads(64, 1, 1)]
+void CopyMeshPositions(uint3 threadID : SV_DispatchThreadID,
+	ByteAddressBuffer g_VertexData,
+	RWStructuredBuffer<SVertOut> g_MeshVertsOut)
+{
+	const uint t = threadID.x;
+
+	if (t >= g_VertCount)
+	{
+		return;
+	}
+
+	const uint stride = g_VertStride;
+
+	float3 vP = float3(0, 0, 0);
+	float3 vN = float3(0, 0, 0);
+
+	uint dataStep = t * stride;
+
+	uint floatStep = dataStep;
+	vP = asfloat(g_VertexData.Load3(floatStep));
+
+	floatStep = dataStep + 12;
+	vN = asfloat(g_VertexData.Load3(floatStep));
+
+	g_MeshVertsOut[t].pos.xyz = vP;
+	g_MeshVertsOut[t].norm.xyz = vN;
+}

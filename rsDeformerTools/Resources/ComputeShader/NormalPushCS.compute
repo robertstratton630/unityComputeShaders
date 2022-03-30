@@ -1,0 +1,91 @@
+#pragma kernel SolveOutput
+#pragma kernel AverageNormals
+#pragma kernel CopySkinBuffer
+#pragma kernel CopyFlipBuffer
+#pragma kernel FlipVertexBuffers
+
+struct Vertex
+{
+	float3 position;
+	float3 normal;
+};
+
+RWStructuredBuffer<Vertex> vertexBuffer;
+RWStructuredBuffer<Vertex> vertexBufferFlip;
+
+StructuredBuffer<Vertex> skinnedVertex;
+StructuredBuffer<float> envelopeBuffer;
+StructuredBuffer<int> topoVertVerts;
+StructuredBuffer<int> topoOffsets;
+StructuredBuffer<int> topoStartIndexes;
+
+float envelope;
+float pushAmount;
+
+
+[numthreads(64,1,1)]
+void SolveOutput (uint id : SV_DispatchThreadID)
+{
+    float env = envelopeBuffer[id.x];
+
+    float3 position =  vertexBuffer[id.x].position;
+    float3 normal =  vertexBuffer[id.x].normal;
+
+    float3 out_position = position + (normal*pushAmount);
+    out_position = lerp(position,out_position,envelope*env);
+
+    vertexBuffer[id.x].position = out_position;
+    vertexBuffer[id.x].normal = skinnedVertex[id.x].normal;
+}
+
+
+[numthreads(64,1,1)]
+void AverageNormals (uint id : SV_DispatchThreadID)
+{
+    Vertex v = vertexBufferFlip[id.x];
+    float3 normal = v.normal;
+
+    int startIndex = topoOffsets[id.x];
+    int connectedVertCount = topoOffsets[id.x + 1] - topoOffsets[id.x];
+
+    float3 normalSum = float3(normal);
+    for (int i = startIndex; i < startIndex + connectedVertCount; i++)
+    {
+        Vertex connectedV = vertexBufferFlip[topoVertVerts[i]];
+        normalSum += connectedV.normal;
+    }
+    normalSum = normalize(normalSum /  (float)connectedVertCount);
+
+
+    vertexBuffer[id.x].normal = normalSum;
+}
+
+
+[numthreads(64,1,1)]
+void CopySkinBuffer (uint id : SV_DispatchThreadID)
+{
+    vertexBuffer[id.x].position = skinnedVertex[id.x].position;
+    vertexBuffer[id.x].normal = skinnedVertex[id.x].normal;
+}
+
+
+[numthreads(64,1,1)]
+void CopyFlipBuffer (uint id : SV_DispatchThreadID)
+{
+    vertexBufferFlip[id.x].position = vertexBuffer[id.x].position;
+    vertexBufferFlip[id.x].normal = vertexBuffer[id.x].normal;
+}
+
+
+[numthreads(64,1,1)]
+void FlipVertexBuffers (uint id : SV_DispatchThreadID)
+{
+    float3 tmpPosition = vertexBuffer[id.x].position;
+    float3 tmpNormal = vertexBuffer[id.x].normal;
+
+    vertexBuffer[id.x].position = vertexBufferFlip[id.x].position;
+    vertexBufferFlip[id.x].position = tmpPosition;
+    
+    vertexBuffer[id.x].normal = vertexBufferFlip[id.x].normal;
+    vertexBufferFlip[id.x].normal = tmpNormal;
+}
